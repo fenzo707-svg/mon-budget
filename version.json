@@ -1,0 +1,9 @@
+{
+  "version": "2026-09-19.1",
+  "date": "2026-09-19",
+  "notes": [
+    "L'app s'installe sur l'écran d'accueil et marche sans réseau",
+    "Tes saisies hors ligne partent toutes seules au retour du réseau",
+    "Nouveau : bouton « Signaler un problème » dans l'onglet Amis"
+  ]
+}

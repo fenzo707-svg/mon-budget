@@ -729,6 +729,25 @@ body.obs #status{background:var(--violet-soft,var(--accent-soft));color:var(--vi
 .tcadr strong{font-weight:640}
 .tcsans{color:var(--amber);font-weight:600}
 
+/* ---------- Mises à jour, signalements ---------- */
+.majsous{font-size:12.5px;color:var(--muted);margin:-4px 0 12px}
+.majnotes{list-style:none;margin:0 0 6px;padding:0}
+.majnotes li{position:relative;padding:0 0 9px 22px;font-size:14px;line-height:1.5}
+.majnotes li::before{content:"✓";position:absolute;left:0;color:var(--green);font-weight:700}
+.signal textarea{width:100%;min-height:78px;padding:11px 13px;border:1px solid var(--line-strong);
+  border-radius:10px;background:var(--input);color:var(--text);font:inherit;font-size:14.5px;
+  resize:vertical;margin-bottom:10px}
+.signal textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.tcsig{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.tcsig h4{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--muted);margin-bottom:8px}
+.tcs{padding:9px 11px;background:var(--amber-soft);border-radius:9px;margin-bottom:7px;font-size:13px;
+  line-height:1.5}
+.tcs .tcsq{font-weight:650}
+.tcs .tcst{font-size:11px;color:var(--faint);margin-left:6px}
+.tcver{font-size:12px;color:var(--muted);margin:-6px 0 12px}
+.tcver strong{color:var(--text)}
+
 </style>
 </head>
 <body>
@@ -1097,6 +1116,21 @@ body.obs #status{background:var(--violet-soft,var(--accent-soft));color:var(--vi
   </div>
 </div>
 
+<!-- Mises à jour : « voici ce qui a changé » ou « une nouvelle version est prête » -->
+<div class="veil" id="vmaj">
+  <div class="modal auth">
+    <div class="mhead"><h2 id="m_titre">Mise à jour</h2></div>
+    <div class="mbody">
+      <div id="m_sous" class="majsous"></div>
+      <ul id="m_notes" class="majnotes"></ul>
+      <div class="mfoot">
+        <button class="btn" id="m_plus_tard">Plus tard</button>
+        <button class="btn primary" id="m_ok">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -1113,7 +1147,10 @@ body.obs #status{background:var(--violet-soft,var(--accent-soft));color:var(--vi
 
 /* Version de l'application. Sert au journal technique : quand quelqu'un
    signale un bug, on sait tout de suite sur quelle version il tourne. */
-const APPV = "2026-09-18";
+const APPV = "2026-09-19.1";
+/* Date et nouveautés de cette version, remplies par gen_enligne.py
+   à partir de version.json (la même source que le fichier publié). */
+const APPV_INFO = {"version": "2026-09-19.1", "date": "2026-09-19", "notes": ["L'app s'installe sur l'écran d'accueil et marche sans réseau", "Tes saisies hors ligne partent toutes seules au retour du réseau", "Nouveau : bouton « Signaler un problème » dans l'onglet Amis"]};
 
 /* Vrai pendant qu'on regarde le budget de quelqu'un d'autre.
    Tant que c'est vrai, RIEN n'est enregistré : ni sur l'appareil,
@@ -1339,6 +1376,18 @@ const Compte = (function(){
     }catch(e){ /* silence : le journal est un confort, pas une dépendance */ }
   }
 
+  /* Signaler un problème : comme noter(), mais on veut savoir si c'est parti. */
+  async function signaler(texte){
+    return rest("/journal", {method:"POST", headers:{Prefer:"return=minimal"},
+      body:{qui:moi().id, quoi:"signalement", detail:String(texte).slice(0,300),
+            version:(APPV+" "+appareil()).slice(0,24)}});
+  }
+  /* Tour de contrôle : les derniers signalements de tout le monde. */
+  async function signalements(n){
+    return rest("/journal?quoi=eq.signalement&select=qui,detail,version,cree_le"
+      +"&order=cree_le.desc&limit="+(Number(n)||20));
+  }
+
   /* Qui a ouvert MON budget depuis la tour de contrôle.
      Tout le monde peut poser la question sur soi-même. */
   async function quiMaOuvert(){
@@ -1389,7 +1438,7 @@ const Compte = (function(){
           monBudget, pousser, creerSiAbsent, monProfil, majPrenom,
           budgetsPartages, quiMeVoit, couperPartage,
           monCode, nouveauCode, accepter,
-          noter, quiMaOuvert, mesCoordonnees, enregistrerCoordonnees,
+          noter, signaler, signalements, quiMaOuvert, mesCoordonnees, enregistrerCoordonnees,
           suisJeAdmin, tableauBord, budgetDe, journalDe, noterAcces, SRV};
 })();
 
@@ -3883,6 +3932,7 @@ let estAdmin = false;
 let bordCache = {lignes:null, charge:false, quand:0};
 let bordDetail = {id:null, lignes:null, charge:false};
 let vuCache = null;            /* qui a ouvert MON budget */
+let sigCache = [];             /* tour de contrôle : derniers signalements */
 
 const CLE_MAJ = KEY + "-maj";
 function majLocale(){ try{ return Number(localStorage.getItem(CLE_MAJ))||0; }catch(e){ return 0; } }
@@ -4211,10 +4261,16 @@ document.addEventListener("keydown", e=>{
 async function rafraichirBord(silencieux){
   if(!estAdmin) return;
   try{
-    const l = await Compte.tableauBord();
-    const avant = JSON.stringify(bordCache.lignes);
+    const [l, sig] = await Promise.all([
+      Compte.tableauBord(), Compte.signalements(20).catch(()=>[])
+    ]);
+    const avant = JSON.stringify(bordCache.lignes) + JSON.stringify(sigCache);
+    sigCache = sig || [];
     bordCache = {lignes:l||[], charge:true, quand:Date.now()};
-    if(tab==="amis" && (!silencieux || avant!==JSON.stringify(bordCache.lignes))) render();
+    const apres = JSON.stringify(bordCache.lignes) + JSON.stringify(sigCache);
+    /* on ne redessine pas si quelqu'un est en train d'écrire dans l'onglet */
+    const saisie = document.activeElement && /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName);
+    if(tab==="amis" && (!silencieux || (avant!==apres && !saisie))) render();
   }catch(e){ if(!silencieux) toast("Tour de contrôle injoignable"); }
 }
 
@@ -4241,6 +4297,13 @@ function viewBord(){
   const morts  = L.filter(u=>!u.maj || !u.jours).length;
   const bugs   = L.reduce((t,u)=>t+(Number(u.erreurs_7j)||0),0);
   const sansAdr = L.filter(u=>!u.ville).length;
+  const avecVersion = L.filter(u=>u.version);
+  const aJour = avecVersion.filter(u=>String(u.version).split(" ")[0]===APPV).length;
+  const nomDe = {}; L.forEach(u=>nomDe[u.id]=u.prenom||"?");
+  const sigs = sigCache.map(s=>`<div class="tcs">
+      <span class="tcsq">${esc(nomDe[s.qui]||"?")}</span>
+      <span class="tcst">${new Date(s.cree_le).toLocaleString("fr-FR")} · ${esc(s.version||"")}</span>
+      <div>${esc(s.detail)}</div></div>`).join("");
 
   const rows = L.map(u=>{
     const err = Number(u.erreurs_7j)||0;
@@ -4277,7 +4340,11 @@ function viewBord(){
       <br>Tu peux tout lire. Tu ne peux rien modifier chez eux : le serveur
       refuse, même depuis ici. Chaque ouverture laisse une trace que la
       personne concernée voit de son côté.</div>
+    <div class="tcver">Version en ligne : <strong>${esc(APPV)}</strong>
+      (${esc(dateFr(APPV_INFO.date))}) · ${aJour} sur ${avecVersion.length} à jour</div>
     <div class="tcl">${rows || '<div class="vide2">Aucun compte pour l\'instant.</div>'}</div>
+    <div class="tcsig"><h4>Signalements reçus</h4>${sigs ||
+      '<div class="vide2">Aucun pour l\'instant.</div>'}</div>
     <div style="margin-top:12px"><button class="btn" id="b_bordmaj">Rafraîchir</button></div>
   </div>`;
 }
@@ -4297,7 +4364,7 @@ function viewDetail(u){
     la version en ligne, ou elle est restée hors connexion.</div></div>`;
   return `<div class="tcd">${viewAdresse(u)}
     <div class="tcdt">Journal technique — ni montants, ni notes, jamais.</div>
-    ${J.map(j=>`<div class="tcj ${j.quoi==="erreur"?"ko":""}">
+    ${J.map(j=>`<div class="tcj ${j.quoi==="erreur"||j.quoi==="signalement"?"ko":""}">
       <span class="tcjq">${esc(j.quoi)}</span>
       <span class="tcjd">${esc(j.detail||"—")}</span>
       <span class="tcjv">${esc(j.version||"")}</span>
@@ -4381,8 +4448,9 @@ async function rafraichirAmis(silencieux){
     amisCache = {suivis, quiMeVoit, code, charge:true};
     vuCache = vu;
     if(estAdmin) rafraichirBord(true);
+    const saisie = document.activeElement && /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName);
     if(tab==="amis" && (!silencieux ||
-       avant!==JSON.stringify(amisCache)+JSON.stringify(vuCache))) render();
+       (avant!==JSON.stringify(amisCache)+JSON.stringify(vuCache) && !saisie))) render();
   }catch(e){ if(!silencieux) toast("Serveur injoignable"); }
 }
 
@@ -4460,6 +4528,17 @@ function viewAmis(){
       <div class="vide2">Aucun pour l'instant. Donne ton code
         <strong>${esc(c)}</strong> à quelqu'un pour commencer.</div>
     </div>`}
+
+    <div class="acarte signal">
+      <h3>Un problème ? Une idée ?</h3>
+      <div class="expl">Écris-le ici : ça arrive directement chez la personne qui gère
+        l'application, avec le type de téléphone et la version. Pas besoin de détailler
+        tes montants.</div>
+      <textarea id="sig_txt" maxlength="300"
+        placeholder="Ex. : quand j'ajoute une dépense le dimanche, le total ne bouge pas."></textarea>
+      <button class="btn primary" id="b_signal">Envoyer</button>
+      <div id="sig_msg" style="margin-top:10px"></div>
+    </div>
 
     <div class="acarte">
       <h3>Qui a ouvert mon budget</h3>
@@ -4642,6 +4721,20 @@ function wireAmis(){
     });
   });
 
+  const bs=document.getElementById("b_signal");
+  if(bs) bs.addEventListener("click", async ()=>{
+    const ta=document.getElementById("sig_txt"), m=document.getElementById("sig_msg");
+    const txt=(ta.value||"").trim();
+    if(txt.length<5){ m.innerHTML='<div class="msg ko">Décris le problème en quelques mots.</div>'; return; }
+    bs.disabled=true; m.innerHTML='<div class="msg info">Envoi…</div>';
+    try{
+      await Compte.signaler(txt);
+      ta.value=""; m.innerHTML='<div class="msg ok">Merci, c\'est envoyé.</div>';
+      if(estAdmin) rafraichirBord(true);
+    }catch(e){ m.innerHTML='<div class="msg ko">'+esc(messageClair(e))+'</div>'; }
+    finally{ bs.disabled=false; }
+  });
+
   const bc=document.getElementById("b_coord");
   if(bc) bc.addEventListener("click",()=>ouvrirCoord(!coordCache));
 
@@ -4658,6 +4751,83 @@ function wireAmis(){
     setStatus(storageOK?"Enregistré":"Non enregistré");
   });
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Mises à jour
+   ───────────────────────────────────────────────────────────────────
+   1. Après une mise à jour : « Mise à jour du 19 septembre : … »,
+      une seule fois, avec la liste de ce qui a changé.
+   2. Si une mise à jour est publiée PENDANT que l'app est ouverte :
+      « Nouvelle version disponible → Mettre à jour ».
+   La version publiée est décrite dans version.json, à côté de l'app.
+   ═══════════════════════════════════════════════════════════════════ */
+const CLE_VUE = KEY + "-version-vue";
+let majRefusee = null;               /* « Plus tard » : on ne redemande pas tout de suite */
+
+function dateFr(isoTxt){
+  const [y,m,d] = String(isoTxt||"").split("-").map(Number);
+  if(!y) return "";
+  return new Date(y,m-1,d).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
+}
+
+function ouvrirMaj(titre, sous, notes, recharger){
+  document.getElementById("m_titre").textContent = titre;
+  document.getElementById("m_sous").textContent  = sous||"";
+  document.getElementById("m_notes").innerHTML =
+    (notes||[]).map(n=>"<li>"+esc(n)+"</li>").join("");
+  const ok = document.getElementById("m_ok"), tard = document.getElementById("m_plus_tard");
+  ok.textContent = recharger ? "Mettre à jour" : "OK";
+  tard.style.display = recharger ? "" : "none";
+  ok.onclick = ()=>{
+    fermeVeil("vmaj");
+    if(recharger) appliquerMaj();
+  };
+  tard.onclick = ()=>{ majRefusee = recharger; fermeVeil("vmaj"); };
+  ouvreVeil("vmaj");
+}
+
+/* Recharge proprement : la nouvelle version est prise sur le réseau. */
+async function appliquerMaj(){
+  try{
+    const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+    if(reg) await reg.update();
+  }catch(e){}
+  location.reload();
+}
+
+/* Au lancement : si l'app vient d'être mise à jour, on dit ce qui a changé. */
+function montrerNouveautes(){
+  let vue = null;
+  try{ vue = localStorage.getItem(CLE_VUE); localStorage.setItem(CLE_VUE, APPV); }catch(e){}
+  if(!vue || vue===APPV) return;          /* premier lancement : pas de bandeau */
+  const go = ()=>{
+    if(document.querySelector(".veil.on")){ setTimeout(go, 1500); return; }
+    ouvrirMaj("Mise à jour", "Faite le " + dateFr(APPV_INFO.date), APPV_INFO.notes, false);
+  };
+  setTimeout(go, 900);
+}
+
+/* Pendant l'utilisation : une version plus récente a-t-elle été publiée ? */
+async function verifierMaj(){
+  if(!/^https?:$/.test(location.protocol) || OBS) return;
+  if(document.visibilityState!=="visible" || document.querySelector(".veil.on")) return;
+  try{
+    const r = await fetch("version.json", {cache:"no-store"});
+    if(!r.ok) return;
+    const v = await r.json();
+    if(!v || !v.version || v.version===APPV || v.version===majRefusee) return;
+    if(String(v.version) < String(APPV)) return;      /* jamais revenir en arrière */
+    ouvrirMaj("Nouvelle version disponible",
+              "Publiée le " + dateFr(v.date) + ". Ça prend deux secondes.",
+              v.notes, v.version);
+  }catch(e){ /* hors ligne : on verra plus tard */ }
+}
+setTimeout(verifierMaj, 4000);
+setInterval(verifierMaj, 5*60*1000);
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState==="visible") setTimeout(verifierMaj, 1200);
+});
+montrerNouveautes();
 
 /* ═══════════════════════════════════════════════════════════════════
    Journal technique
