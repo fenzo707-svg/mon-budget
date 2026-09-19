@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#2f5fd0">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <style>
 :root{
   --bg:#f4f6fa; --surface:#ffffff; --surface-2:#f0f3f9; --line:#e2e7f0;
@@ -1466,10 +1467,12 @@ function save(){
       try{ localStorage.setItem(KEY, JSON.stringify(S)); }
       catch(e){ storageOK=false; if(!dbRef) showWarn(); }
     }
+    marquerAttente();
     if(dbRef){
       try{
         lastSync=JSON.stringify(S);
         await dbRef.set({state:S, maj:new Date().toISOString()});
+        effacerAttente();
         dirty=false; lastSave=new Date(); setStatus("Synchronisé", true);
         return;
       }catch(e){ setStatus("Hors ligne"); return; }
@@ -3894,8 +3897,39 @@ function avecEtat(etat, calcul){
   finally { S = sauveS; cache = sauveCache; }
 }
 
+/* ─────────── Hors ligne : ce qui attend d'être envoyé ───────────
+   Chaque saisie note « il y a du neuf ici, pas encore sur le serveur ».
+   Au retour du réseau, c'est CE drapeau qui décide : le téléphone
+   envoie ses saisies au lieu de se faire écraser par l'ancienne
+   version du serveur. */
+const CLE_ATTENTE = KEY + "-attente";
+function marquerAttente(){
+  try{ const u=Compte.moi(); localStorage.setItem(CLE_ATTENTE, u ? u.id : "anon"); }catch(e){}
+}
+function effacerAttente(){ try{ localStorage.removeItem(CLE_ATTENTE); }catch(e){} }
+function lireAttente(){ try{ return localStorage.getItem(CLE_ATTENTE); }catch(e){ return null; } }
+/* Les saisies en attente sont-elles bien à la personne connectée ?
+   Saisies faites sans compte : envoyées seulement si le compte est vide,
+   pour ne jamais écraser un budget déjà sur le serveur. */
+function attenteValable(serveurAContenu){
+  const v = lireAttente(); if(!v) return false;
+  const u = Compte.moi();
+  if(u && v===u.id) return true;
+  if(v==="anon") return !serveurAContenu;
+  return false;
+}
+function ecrireLocal(){
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
+}
+
 /* ─────────── Synchronisation ─────────── */
+var syncEnCours = false;   /* var : initSync est appelé avant que ce bloc soit lu */
 async function initSync(){
+  if(syncEnCours) return;
+  syncEnCours = true;
+  try{ await initSyncCorps(); } finally { syncEnCours = false; }
+}
+async function initSyncCorps(){
   if(!Compte.configure()){ setStatus(storageOK?"Enregistré":"Non enregistré"); return; }
   if(!Compte.connecte()){ setStatus("Hors ligne"); majEtatCompte(); return; }
 
@@ -3909,9 +3943,11 @@ async function initSync(){
       (Object.keys(brut.jours||{}).length || Object.keys(brut.params||{}).length);
     const majDistante = (b && b.maj) ? new Date(b.maj).getTime() : 0;
 
-    if(aDuContenu && majDistante >= majLocale()){
+    const attente = attenteValable(aDuContenu);
+    if(aDuContenu && !attente && majDistante >= majLocale()){
       S = normalise(brut);
       lastSync = JSON.stringify(S);
+      ecrireLocal();                 /* dispo hors ligne au prochain lancement */
       invalidate(); render();
     }
 
@@ -3929,7 +3965,7 @@ async function initSync(){
     majEtatCompte();
 
     /* le local est en avance : on envoie tout de suite */
-    if(!aDuContenu || majLocale() > majDistante) save();
+    if(!aDuContenu || attente || majLocale() > majDistante) save();
 
     lancerSonde();
   }catch(e){
@@ -3939,6 +3975,7 @@ async function initSync(){
 
 /* On redemande régulièrement au serveur s'il a du neuf.
    Uniquement quand l'écran est allumé et l'onglet visible. */
+var sondeBranchee = false;
 function lancerSonde(){
   clearTimeout(sondeT);
   const tic = async ()=>{
@@ -3953,7 +3990,7 @@ function lancerSonde(){
           versionServeur = Number(b.version)||versionServeur;
           const j = JSON.stringify(normalise(b.etat));
           if(j !== JSON.stringify(S)){
-            S = JSON.parse(j); lastSync = j; noterMaj();
+            S = JSON.parse(j); lastSync = j; noterMaj(); ecrireLocal();
             invalidate(); render(); setStatus("Mis à jour", true);
           }
         }
@@ -3963,9 +4000,29 @@ function lancerSonde(){
     sondeT = setTimeout(tic, 10000);
   };
   sondeT = setTimeout(tic, 10000);
+  if(sondeBranchee) return;
+  sondeBranchee = true;
   document.addEventListener("visibilitychange",()=>{
-    if(document.visibilityState==="visible"){ clearTimeout(sondeT); sondeT=setTimeout(tic,600); }
+    if(document.visibilityState==="visible" && sync){ clearTimeout(sondeT); sondeT=setTimeout(tic,600); }
   });
+}
+
+/* Retour du réseau, ou retour sur l'app après l'avoir quittée :
+   on se reconnecte et on envoie ce qui a été saisi hors ligne. */
+function relancerSync(){
+  if(OBS || !Compte.configure() || !Compte.connecte()) return;
+  if(!sync){ initSync(); return; }
+  if(lireAttente()) save();
+}
+window.addEventListener("online", relancerSync);
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="visible") relancerSync();
+});
+
+/* L'app s'installe sur le téléphone et s'ouvre même sans réseau. */
+if("serviceWorker" in navigator &&
+   (location.protocol==="https:" || location.hostname==="localhost")){
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
 }
 
 function majEtatCompte(){
