@@ -39,7 +39,28 @@
 (async function(){
   var URL_SRV = "https://mwsakehufnacxeaqxuuc.supabase.co", CLE = "sb_publishable_BaeTZgekUoGhgfiOR1gmcw_oiBR1WWZ";
   var K = "mon-budget-app";                       /* copie locale de l'app */
+  /* les deux seuls messages du chargeur, dans la langue de l'appareil */
+  var L = (function(){ try{ var l=localStorage.getItem("mon-budget-langue"); if(l) return l; }catch(e){}
+    return String(navigator.language||"fr").slice(0,2); })();
+  var TR = {
+    "Il faut une connexion internet pour le tout premier lancement. Vérifie ton réseau.":
+      {en:"An internet connection is needed the very first time. Check your network.",
+       es:"Hace falta conexión a internet la primera vez. Comprueba tu red.",
+       de:"Beim allerersten Start braucht es eine Internetverbindung. Prüfe dein Netz.",
+       ru:"Для самого первого запуска нужен интернет. Проверь подключение."},
+    "L'app n'a pas pu s'ouvrir. Réessaie avec du réseau.":
+      {en:"The app couldn't open. Try again with a connection.",
+       es:"La app no ha podido abrirse. Vuelve a intentarlo con conexión.",
+       de:"Die App konnte nicht öffnen. Versuch es mit Netz noch einmal.",
+       ru:"Приложение не открылось. Попробуй снова с интернетом."},
+    "Chargement…": {en:"Loading…", es:"Cargando…", de:"Wird geladen…", ru:"Загрузка…"},
+    "Réessayer": {en:"Try again", es:"Reintentar", de:"Erneut versuchen", ru:"Повторить"}
+  };
+  var tr = function(t){ return (TR[t] && TR[t][L]) || t; };
+  (function(){ var m=document.getElementById("dem_msg"); if(m) m.textContent=tr(m.textContent);
+    var r=document.getElementById("dem_re"); if(r) r.textContent=tr(r.textContent.trim()); })();
   var msg = function(t, re){
+    t = tr(t);
     document.getElementById("dem_msg").textContent = t;
     document.getElementById("dem_re").style.display = re ? "inline-block" : "none";
   };

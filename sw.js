@@ -4,7 +4,7 @@
    Sans réseau : on ouvre celle qui est gardée.
    Les données (Supabase) ne passent JAMAIS par ici : elles ne sont
    jamais mises en cache, pour ne pas mélanger les comptes. */
-const CACHE = "mon-budget-v2";
+const CACHE = "mon-budget-v3";
 const FICHIERS = ["./", "./index.html", "./apple-touch-icon.png", "./icone-512.png", "./manifest.webmanifest"];
 
 self.addEventListener("install", e => {
@@ -40,4 +40,22 @@ self.addEventListener("fetch", e => {
       .then(r => r || reseau.catch(garde))
       .then(r => r || garde())
   );
+});
+
+/* Rappels (14h · 18h · 21h30) : le serveur envoie un message chiffré pour ce
+   téléphone seul ; on l'affiche. Un appui ouvre l'app. */
+self.addEventListener("push", e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (_) { d = { corps: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(d.titre || "Mon Budget", {
+    body: d.corps || "", tag: d.tag || "rappel-budget", renotify: true,
+    icon: "apple-touch-icon.png", badge: "apple-touch-icon.png"
+  }));
+});
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(ws => {
+    for (const w of ws) { if ("focus" in w) return w.focus(); }
+    return self.clients.openWindow("./");
+  }));
 });

@@ -1,9 +1,1 @@
-{
-  "version": "2026-09-19.2",
-  "date": "2026-09-19",
-  "notes": [
-    "L'onglet « Amis » devient « Compte »",
-    "Le code de partage entre amis est retiré : ton budget n'est visible que par toi",
-    "Bouton « Signaler un problème » dans l'onglet Compte"
-  ]
-}
+{"version":"2026-09-20.2","date":"2026-09-20","notes":["Langues : anglais, espagnol, allemand et russe (Paramètres › Langue)","Monnaies : choisis ta monnaie, et note une dépense dans n'importe quelle devise, convertie au taux du jour","Rappels sur ton téléphone à 14h, 18h et 21h30 (onglet Compte)","Le bouton « Paramètres » remplace les trois petits points","Correction : le budget par jour se met à jour tout seul après minuit"]}
