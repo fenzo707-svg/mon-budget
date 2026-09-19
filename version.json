@@ -1,9 +1,9 @@
 {
-  "version": "2026-09-19.1",
+  "version": "2026-09-19.2",
   "date": "2026-09-19",
   "notes": [
-    "L'app s'installe sur l'écran d'accueil et marche sans réseau",
-    "Tes saisies hors ligne partent toutes seules au retour du réseau",
-    "Nouveau : bouton « Signaler un problème » dans l'onglet Amis"
+    "L'onglet « Amis » devient « Compte »",
+    "Le code de partage entre amis est retiré : ton budget n'est visible que par toi",
+    "Bouton « Signaler un problème » dans l'onglet Compte"
   ]
 }
