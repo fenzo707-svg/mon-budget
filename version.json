@@ -1,1 +1,1 @@
-{"version": "2026-10-17.1", "date": "2026-10-17", "notes": ["Paramètres : le message « Paramètres enregistrés » ne s'affiche plus quand tu refermes un réglage sans rien changer ; il ne cache plus le titre suivant"]}
+{"version": "2026-10-22.1", "date": "2026-10-22", "notes": ["Ordinateur : les cases qui répétaient le haut de l'écran Jour sont retirées ; les onglets remontent", "« Sorties du mois » compte aussi les abonnements : le même total que dans l'Analyse", "Charges : quand tu ajoutes un 2e crédit ou un 2e loyer, le nom est prêt à être réécrit"]}
