@@ -1,1 +1,1 @@
-{"version": "2026-10-22.5", "date": "2026-10-22", "notes": ["Voyages : la liste des participants montre qui a un compte et qui n'en a pas", "Un petit message quand un ami rejoint ton voyage", "Tu peux retirer un participant : ses parts sont réparties entre les autres"]}
+{"version": "2026-10-22.6", "date": "2026-10-22", "notes": ["Voyages : quand tout est réglé, « Voyage terminé » le range dans « Voyages passés »", "Notification quand un ami ajoute une dépense ou rejoint ton voyage (avec les rappels activés)"]}
